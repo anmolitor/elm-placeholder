@@ -1,6 +1,6 @@
 {
   "type": "package",
-  "name": "amolitor/placeholder",
+  "name": "andreasewering/elm-placeholder",
   "summary": "Typesafe string interpolation via placeholder parsing",
   "exposed-modules": ["Placeholder.DoubleCurly", "Placeholder.Internal"],
   "version": "1.0.0",
