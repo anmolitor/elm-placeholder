@@ -25,6 +25,8 @@ jobs:
         run: npm ci
       - name: test
         run: npm test
-      - name: npm publish
+      - name: publish
+        uses: dillonkearns/elm-publish-action@v1
         if: ${{ github.event_name == 'push' }}
-        run: elm publish || true
+        with:
+          dry-run: true
