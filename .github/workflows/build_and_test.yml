@@ -29,4 +29,4 @@ jobs:
         uses: dillonkearns/elm-publish-action@v1
         if: ${{ github.event_name == 'push' }}
         with:
-          dry-run: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
