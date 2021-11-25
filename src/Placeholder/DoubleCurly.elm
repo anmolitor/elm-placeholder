@@ -22,8 +22,8 @@ syntax =
 
 {-| Parse a `String` into a function substituting the argument at the position marked by double curly braces.
 
-    > f = parsePlaceholder1 "This is {{name}}s example" |> Result.map ((|> "Andy"))
-    Ok ("This is Andys example") : Result String String
+    parsePlaceholder1 "This is {{name}}s example" |> Result.map ((|>) "Andy")
+    --> Ok "This is Andys example"
 
 -}
 parsePlaceholder1 : String -> Result String (String -> String)

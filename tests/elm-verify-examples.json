@@ -1,0 +1,4 @@
+{
+  "root": "../src",
+  "tests": ["Placeholder.Internal", "Placeholder.DoubleCurly"]
+}

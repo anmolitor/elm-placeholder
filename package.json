@@ -1,0 +1,23 @@
+{
+  "name": "elm-placeholder",
+  "version": "1.0.0",
+  "description": "Typesafe string interpolation",
+  "main": "index.js",
+  "scripts": {
+    "test": "elm-verify-examples && elm-test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andreasewering/elm-placeholder.git"
+  },
+  "author": "Andreas Molitor",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/andreasewering/elm-placeholder/issues"
+  },
+  "homepage": "https://github.com/andreasewering/elm-placeholder#readme",
+  "devDependencies": {
+    "elm-test": "^0.19.1-revision7",
+    "elm-verify-examples": "^5.2.0"
+  }
+}

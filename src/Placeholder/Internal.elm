@@ -1,6 +1,7 @@
 module Placeholder.Internal exposing
-    ( Template, templateParser, parseTemplate
+    ( Template, parseTemplate, getPlaceholderNames, templateToString
     , Syntax, parsePlaceholder1, parsePlaceholder2, parsePlaceholder3, parsePlaceholder4
+    , templateParser
     )
 
 {-| This module allows defining placeholder parsers based on a non-supported `Syntax` as well as
@@ -9,7 +10,7 @@ using the internal `Template` type for different purposes.
 
 # Template
 
-@docs Template, templateParser, parseTemplate
+@docs Template, parseTemplate, getPlaceholderNames, templateToString
 
 
 # Syntax
@@ -18,6 +19,7 @@ using the internal `Template` type for different purposes.
 
 -}
 
+import List.NonEmpty exposing (NonEmpty)
 import Parser exposing ((|.), (|=))
 
 
@@ -31,44 +33,47 @@ type alias Syntax =
 
 
 {-| A `Template` includes an ordered list of placeholders and text segments.
-`Template`s coming from this module guarantee that:
+`Template`s guarantee that
 
-    > not (List.isEmpty segments)
-    > List.length segments == List.length placeholders + 1
+    List.length segments == List.length placeholders + 1
+
+and they can be converted back to the same `String` representation they were parsed from.
 
 -}
-type alias Template =
+type Template
+    = Template TemplateInternal
+
+
+type alias TemplateInternal =
     { placeholders : List String
-    , segments : List String
+    , segments : NonEmpty String
+    , syntax : Syntax
     }
 
 
-emptyTemplate : String -> Template
-emptyTemplate begin =
-    { placeholders = [], segments = [ begin ] }
+emptyTemplate : Syntax -> String -> TemplateInternal
+emptyTemplate syntax begin =
+    { placeholders = [], segments = List.NonEmpty.singleton begin, syntax = syntax }
 
 
-addPlaceholder : String -> Template -> Template
+addPlaceholder : String -> TemplateInternal -> TemplateInternal
 addPlaceholder placeholder template =
     { template | placeholders = placeholder :: template.placeholders }
 
 
-addTextSegment : String -> Template -> Template
+addTextSegment : String -> TemplateInternal -> TemplateInternal
 addTextSegment text template =
-    { template | segments = text :: template.segments }
+    { template | segments = List.NonEmpty.cons text template.segments }
 
 
-{-| A parser for a `Template` based on a `Syntax`.
-In this form, it can be combined nicely with other `Parser`s.
--}
-templateParser : Syntax -> Parser.Parser Template
+templateParser : Syntax -> Parser.Parser TemplateInternal
 templateParser ({ startSymbol, endSymbol } as syntax) =
     Parser.chompUntilEndOr startSymbol
         |> Parser.getChompedString
         |> Parser.andThen
             (\begin ->
                 Parser.oneOf
-                    [ Parser.succeed (emptyTemplate begin) |. Parser.end
+                    [ Parser.succeed (emptyTemplate syntax begin) |. Parser.end
                     , Parser.succeed (\placeholder -> addPlaceholder placeholder >> addTextSegment begin)
                         |. Parser.token startSymbol
                         |= Parser.getChompedString (Parser.chompUntil endSymbol)
@@ -79,57 +84,98 @@ templateParser ({ startSymbol, endSymbol } as syntax) =
 
 
 {-| Parse a `String` into a `Template` based on a `Syntax`.
-Example:
 
-    > parseTemplate { startSymbol = "${", endSymbol = "}" } "This is ${name}s example"
-    { segments = ["This is ", "s example"], placeholders = ["name"]}
+    syntax : Syntax
+    syntax = { startSymbol = "${", endSymbol = "}" }
+
+    parseTemplate syntax "This is ${name}s example" |> Result.map (always ())
+
+    --> Ok ()
+    parseTemplate syntax "This does not ${makeSense"
+
+    --> Err "TODO deadEndsToString" -- (Waiting for upstream fix in elm/parser)
 
 -}
 parseTemplate : Syntax -> String -> Result String Template
 parseTemplate syntax =
-    Parser.run (templateParser syntax) >> Result.mapError Parser.deadEndsToString
+    Parser.run (templateParser syntax)
+        >> Result.mapError Parser.deadEndsToString
+        >> Result.map Template
+
+
+{-| Get the names of the placeholders in a `Template`.
+
+    parseTemplate { startSymbol = "${", endSymbol = "}" } "${first} ${snd}"
+        |> Result.map getPlaceholderNames
+    --> Ok ["first", "snd"]
+
+-}
+getPlaceholderNames : Template -> List String
+getPlaceholderNames (Template template) =
+    template.placeholders
+
+
+{-| Convert a parsed `Template` back to its `String` representation.
+For any template built with `Syntax` s,
+
+    templateToString >> parseTemplate s == identity
+
+    parseTemplate { startSymbol = "${", endSymbol = "}" } "This is ${name}s example"
+        |> Result.map templateToString
+    --> Ok "This is ${name}s example"
+
+-}
+templateToString : Template -> String
+templateToString (Template { placeholders, segments, syntax }) =
+    List.NonEmpty.head segments
+        :: List.map2 (\p s -> p ++ syntax.endSymbol ++ s) placeholders (List.NonEmpty.tail segments)
+        |> String.join syntax.startSymbol
 
 
 {-| Parse a `String` into a function substituting the argument at the position marked by the `Syntax`.
-Examples:
 
-    > f = parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "This is ${name}s example"
-    Ok <function> : Result String (F1 String)
+    exampleOf : Result String (String -> String)
+    exampleOf = parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "This is ${name}s example"
 
-    > Result.map ((|>) "Andy") f
-    Ok ("This is Andys example") : Result String String
+    Result.map ((|>) "Andy") exampleOf
+    --> Ok "This is Andys example"
 
-    > parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "No placeholder"
-    Err ("Expected more placeholders.") : Result String (F1 String)
+    parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "No placeholder"
+    --> Err "Expected more placeholders."
 
-    > parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "${multiple}${placeholders}"
-    Err ("Expected less placeholders.") : Result String (F1 String)
+    parsePlaceholder1 { startSymbol = "${", endSymbol = "}" } "${multiple}${placeholders}"
+    --> Err "Expected less placeholders."
 
 -}
 parsePlaceholder1 : Syntax -> String -> Result String (F1 String)
 parsePlaceholder1 syntax =
-    parseTemplate syntax >> Result.andThen (\{ segments } -> start ( segments, f1 ) |> enough)
+    parseTemplate syntax >> Result.andThen (start f1 >> enough)
 
 
 {-| Parse a `String` into a function substituting the arguments at the two positions marked by the `Syntax`.
+
+    parsePlaceholder2 { startSymbol = "{", endSymbol = "}" } "{greeting} {target}"
+        |> Result.map (\f -> f "Hello" "World")
+    --> Ok "Hello World"
+
 -}
 parsePlaceholder2 : Syntax -> String -> Result String (F2 String)
 parsePlaceholder2 syntax =
-    parseTemplate syntax >> Result.andThen (\{ segments } -> start ( segments, f2 ) |> oneMore |> enough)
+    parseTemplate syntax >> Result.andThen (start f2 >> oneMore >> enough)
 
 
 {-| Parse a `String` into a function substituting the arguments at the three positions marked by the `Syntax`.
 -}
 parsePlaceholder3 : Syntax -> String -> Result String (F3 String)
 parsePlaceholder3 syntax =
-    parseTemplate syntax >> Result.andThen (\{ segments } -> start ( segments, f3 ) |> twoMore |> enough)
+    parseTemplate syntax >> Result.andThen (start f3 >> twoMore >> enough)
 
 
 {-| Parse a `String` into a function substituting the arguments at the four positions marked by the `Syntax`.
 -}
 parsePlaceholder4 : Syntax -> String -> Result String (F4 String)
 parsePlaceholder4 syntax =
-    parseTemplate syntax >> Result.andThen (\{ segments } -> start ( segments, f4 ) |> twoMore |> oneMore |> enough)
+    parseTemplate syntax >> Result.andThen (start f4 >> twoMore >> oneMore >> enough)
 
 
 type alias F1 a =
@@ -188,9 +234,9 @@ f4 s1 s2 s3 s4 s5 p1 p2 p3 p4 =
     s1 ++ p1 ++ f3 s2 s3 s4 s5 p2 p3 p4
 
 
-start : ( List String, String -> String -> b ) -> Result String ( List String, b )
-start =
-    Ok >> twoMore
+start : (String -> String -> b) -> Template -> Result String ( List String, b )
+start f (Template { segments }) =
+    ( List.NonEmpty.toList segments, f ) |> Ok >> twoMore
 
 
 oneMore : Result String ( List String, String -> b ) -> Result String ( List String, b )

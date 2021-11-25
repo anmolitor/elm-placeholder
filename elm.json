@@ -1,15 +1,20 @@
 {
-  "type": "package",
-  "name": "andreasewering/elm-placeholder",
-  "summary": "Typesafe string interpolation via placeholder parsing",
-  "exposed-modules": ["Placeholder.DoubleCurly", "Placeholder.Internal"],
-  "version": "1.0.0",
-  "license": "MIT",
-  "source-directories": ["src"],
-  "elm-version": "0.19.0 <= v < 0.20.0",
-  "dependencies": {
-    "elm/core": "1.0.0 <= v < 2.0.0",
-    "elm/parser": "1.0.0 <= v <= 1.1.0"
-  },
-  "test-dependencies": {}
+    "type": "package",
+    "name": "andreasewering/elm-placeholder",
+    "summary": "Typesafe string interpolation via placeholder parsing",
+    "license": "MIT",
+    "version": "1.0.0",
+    "exposed-modules": [
+        "Placeholder.DoubleCurly",
+        "Placeholder.Internal"
+    ],
+    "elm-version": "0.19.0 <= v < 0.20.0",
+    "dependencies": {
+        "elm/core": "1.0.0 <= v < 2.0.0",
+        "elm/parser": "1.0.0 <= v <= 1.1.0",
+        "turboMaCk/non-empty-list-alias": "1.2.0 <= v < 2.0.0"
+    },
+    "test-dependencies": {
+        "elm-explorations/test": "1.2.2 <= v < 2.0.0"
+    }
 }
