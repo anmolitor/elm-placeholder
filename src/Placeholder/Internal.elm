@@ -1,7 +1,6 @@
 module Placeholder.Internal exposing
     ( Template, parseTemplate, getPlaceholderNames, templateToString
     , Syntax, parsePlaceholder1, parsePlaceholder2, parsePlaceholder3, parsePlaceholder4
-    , templateParser
     )
 
 {-| This module allows defining placeholder parsers based on a non-supported `Syntax` as well as
