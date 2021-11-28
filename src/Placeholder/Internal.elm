@@ -1,5 +1,6 @@
 module Placeholder.Internal exposing
-    ( Template, parseTemplate, getPlaceholderNames, getAlphabeticalPlaceholderNames, templateToString, mapPlaceholders
+    ( Template, parseTemplate, getPlaceholderNames, getAlphabeticalPlaceholderNames
+    , getPlaceholderPositions, getSegments, templateToString, mapPlaceholders
     , Syntax, parsePlaceholder1, parsePlaceholder2, parsePlaceholder3, parsePlaceholder4
     , parsePlaceholderAlph1, parsePlaceholderAlph2, parsePlaceholderAlph3, parsePlaceholderAlph4
     )
@@ -10,7 +11,8 @@ using the internal `Template` type for different purposes.
 
 # Template
 
-@docs Template, parseTemplate, getPlaceholderNames, getAlphabeticalPlaceholderNames, templateToString, mapPlaceholders
+@docs Template, parseTemplate, getPlaceholderNames, getAlphabeticalPlaceholderNames
+@docs getPlaceholderPositions, getSegments, templateToString, mapPlaceholders
 
 
 # Syntax
@@ -20,7 +22,7 @@ using the internal `Template` type for different purposes.
 
 -}
 
-import List.NonEmpty exposing (NonEmpty)
+import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Parser exposing ((|.), (|=))
 
 
@@ -46,7 +48,7 @@ type Template
 
 
 type alias TemplateInternal =
-    { placeholders : List ( List Int, String )
+    { placeholders : List ( NonEmpty Int, String )
     , segments : NonEmpty String
     , syntax : Syntax
     , holes : Int
@@ -55,25 +57,25 @@ type alias TemplateInternal =
 
 emptyTemplate : Syntax -> String -> TemplateInternal
 emptyTemplate syntax begin =
-    { placeholders = [], segments = List.NonEmpty.singleton begin, syntax = syntax, holes = 0 }
+    { placeholders = [], segments = NonEmpty.singleton begin, syntax = syntax, holes = 0 }
 
 
 addPlaceholder : String -> TemplateInternal -> TemplateInternal
 addPlaceholder placeholder template =
     let
-        helper : List ( List Int, String ) -> List ( List Int, String )
+        helper : List ( NonEmpty Int, String ) -> List ( NonEmpty Int, String )
         helper list =
             case list of
                 [] ->
-                    [ ( [ template.holes ], placeholder ) ]
+                    [ ( NonEmpty.singleton template.holes, placeholder ) ]
 
                 (( pos, ph ) as head) :: rest ->
                     case compare placeholder ph of
                         LT ->
-                            ( [ template.holes ], placeholder ) :: list
+                            ( NonEmpty.singleton template.holes, placeholder ) :: list
 
                         EQ ->
-                            ( template.holes :: pos, ph ) :: rest
+                            ( NonEmpty.cons template.holes pos, ph ) :: rest
 
                         GT ->
                             head :: helper rest
@@ -83,7 +85,7 @@ addPlaceholder placeholder template =
 
 addTextSegment : String -> TemplateInternal -> TemplateInternal
 addTextSegment text template =
-    { template | segments = List.NonEmpty.cons text template.segments }
+    { template | segments = NonEmpty.cons text template.segments }
 
 
 templateParser : Syntax -> Parser.Parser TemplateInternal
@@ -137,12 +139,12 @@ The names are ordered just like they are in the given template string.
 -}
 getPlaceholderNames : Template -> List String
 getPlaceholderNames (Template template) =
-    List.concatMap (\( indices, str ) -> List.map (Tuple.pair str) indices) template.placeholders
+    List.concatMap (\( indices, str ) -> NonEmpty.map (Tuple.pair str) indices |> NonEmpty.toList) template.placeholders
         |> List.sortWith (\( _, a1 ) ( _, a2 ) -> compare a2 a1)
         |> List.map Tuple.first
 
 
-{-| Get the names of the placeholders in a `Template`, but sorted in alphabetical order and without duplicates.
+{-| Get the names of the placeholders in a `Template` sorted in alphabetical order and without duplicates.
 
     parseTemplate { startSymbol = "${", endSymbol = "}" } "${blub} ${bla} ${blub}"
         |> Result.map getAlphabeticalPlaceholderNames
@@ -152,6 +154,32 @@ getPlaceholderNames (Template template) =
 getAlphabeticalPlaceholderNames : Template -> List String
 getAlphabeticalPlaceholderNames (Template template) =
     template.placeholders |> List.map Tuple.second
+
+
+{-| Get the names of the placeholders in a `Template` sorted in alphabetical order together with the positions they appear in.
+
+    parseTemplate { startSymbol = "${", endSymbol = "}" } "${blub} ${bla} ${blub}"
+        |> Result.map getPlaceholderPositions
+    --> Ok [((1, []),"bla"), ((0, [2]),"blub")]
+
+-}
+getPlaceholderPositions : Template -> List ( NonEmpty Int, String )
+getPlaceholderPositions (Template { placeholders, holes }) =
+    -- In order to hide the fact that internally the last placeholder gets the first index,
+    -- we substract all indices from the total number to invert them
+    placeholders |> List.map (Tuple.mapFirst <| NonEmpty.map <| (-) (holes - 1))
+
+
+{-| Get the static parts of the `Template` as an ordered list.
+
+     parseTemplate { startSymbol = "${", endSymbol = "}" } "An ${ex}ample"
+        |> Result.map getSegments
+    --> Ok ( "An ", [ "ample" ] )
+
+-}
+getSegments : Template -> NonEmpty String
+getSegments (Template { segments }) =
+    segments
 
 
 {-| Convert a parsed `Template` back to its `String` representation.
@@ -166,8 +194,8 @@ For any template built with `Syntax` s,
 -}
 templateToString : Template -> String
 templateToString ((Template { placeholders, segments, syntax }) as template) =
-    List.NonEmpty.head segments
-        :: List.map2 (\p s -> p ++ syntax.endSymbol ++ s) (getPlaceholderNames template) (List.NonEmpty.tail segments)
+    NonEmpty.head segments
+        :: List.map2 (\p s -> p ++ syntax.endSymbol ++ s) (getPlaceholderNames template) (NonEmpty.tail segments)
         |> String.join syntax.startSymbol
 
 
@@ -339,8 +367,8 @@ expectPlaceholderKeys expectedNumberOfKeys ((Template { placeholders }) as templ
 
 fillUnsafe : Template -> List String -> String
 fillUnsafe (Template { segments, placeholders }) values =
-    List.NonEmpty.head segments
-        :: List.map2 (++) values (List.NonEmpty.tail segments)
+    NonEmpty.head segments
+        :: List.map2 (++) values (NonEmpty.tail segments)
         |> String.join ""
 
 
@@ -348,13 +376,13 @@ fillAlphabeticalUnsafe : Template -> List String -> String
 fillAlphabeticalUnsafe (Template { segments, placeholders }) values =
     let
         valuesInCorrectOrder =
-            List.map2 (\( indices, _ ) value -> List.map (Tuple.pair value) indices) placeholders values
+            List.map2 (\( indices, _ ) value -> NonEmpty.map (Tuple.pair value) indices |> NonEmpty.toList) placeholders values
                 |> List.concat
                 |> List.sortWith (\( _, a1 ) ( _, a2 ) -> compare a2 a1)
                 |> List.map Tuple.first
     in
-    List.NonEmpty.head segments
-        :: List.map2 (++) valuesInCorrectOrder (List.NonEmpty.tail segments)
+    NonEmpty.head segments
+        :: List.map2 (++) valuesInCorrectOrder (NonEmpty.tail segments)
         |> String.join ""
 
 
