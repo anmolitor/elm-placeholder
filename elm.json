@@ -3,7 +3,7 @@
     "name": "andreasewering/elm-placeholder",
     "summary": "Typesafe string interpolation via placeholder parsing",
     "license": "MIT",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "exposed-modules": [
         "Placeholder.DoubleCurly",
         "Placeholder.Internal"
